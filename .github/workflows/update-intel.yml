@@ -1,0 +1,56 @@
+name: update-intel
+
+# CYBER + KINETIC intel feeds for PROMETHEUS. Anonymous/keyless sources only.
+# Runs 4×/day (every 6h) + manual dispatch. Commits changed data/*.json.
+on:
+  schedule:
+    - cron: '17 */6 * * *'   # 00:17, 06:17, 12:17, 18:17 UTC (offset to dodge top-of-hour load)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-intel
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Each fetcher is independent; one failing source must not block the others.
+      # `|| true` lets the step continue; the script itself exits non-zero on a hard
+      # failure, which we surface in the log but don't let abort the batch.
+      - name: Fetch all feeds
+        working-directory: .
+        run: |
+          set +e
+          rc=0
+          for f in fetch_cisa_kev fetch_nvd_cve fetch_cisa_ics \
+                   fetch_state_travel fetch_gdacs_disasters fetch_usgs_quakes; do
+            echo "::group::$f"
+            python3 scripts/$f.py
+            if [ $? -ne 0 ]; then echo "::warning::$f failed"; rc=1; fi
+            echo "::endgroup::"
+            sleep 2
+          done
+          # Non-fatal: publish whatever succeeded. rc is informational.
+          exit 0
+
+      - name: Commit changed feeds
+        run: |
+          git config user.name  "prometheus-intel-bot"
+          git config user.email "prometheus-intel-bot@users.noreply.github.com"
+          git add data/*.json
+          if git diff --cached --quiet; then
+            echo "no feed changes"
+          else
+            git commit -m "intel: refresh feeds $(date -u +%FT%TZ)"
+            git push
+          fi
