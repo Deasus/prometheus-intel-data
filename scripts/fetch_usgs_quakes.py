@@ -34,13 +34,18 @@ def main() -> None:
             except Exception:  # noqa: BLE001
                 pass
         m = mag if isinstance(mag, (int, float)) else 0
+        # GeoJSON Point coordinates: [lon, lat, depth]. Expose lat/lng for the map.
+        geom = (f.get("geometry") or {}).get("coordinates") or []
+        lng = geom[0] if len(geom) >= 2 else None
+        lat = geom[1] if len(geom) >= 2 else None
         items.append({
             "id": f.get("id"),
             "title": f"M{mag} — " + (p.get("place") or "unknown"),
             "subtitle": ("TSUNAMI ALERT" if p.get("tsunami") else (p.get("alert") or "").upper() or "significant"),
             "tone": "critical" if m >= 7.0 else "elevated" if m >= 6.0 else "moderate",
             "ts": ts,
-            "meta": {"mag": mag, "alert": p.get("alert"), "tsunami": p.get("tsunami"), "url": p.get("url")},
+            "meta": {"mag": mag, "alert": p.get("alert"), "tsunami": p.get("tsunami"),
+                     "lat": lat, "lng": lng, "depth": (geom[2] if len(geom) >= 3 else None), "url": p.get("url")},
         })
     items.sort(key=lambda x: x["meta"].get("mag") or 0, reverse=True)
 

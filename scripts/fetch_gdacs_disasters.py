@@ -32,13 +32,19 @@ def main() -> None:
             orange += 1
         et = p.get("eventtype", "")
         sev = (p.get("severitydata") or {}).get("severitytext", "")
+        # Point geometry is [lon, lat]. Expose lat/lng in meta so the map can plot it.
+        geom = (f.get("geometry") or {}).get("coordinates") or []
+        lng = geom[0] if len(geom) >= 2 else None
+        lat = geom[1] if len(geom) >= 2 else None
         items.append({
             "id": str(p.get("eventid")) + "-" + str(p.get("episodeid", "")),
             "title": p.get("name") or p.get("eventname") or (TYPE_NAME.get(et, et) + " event"),
             "subtitle": " · ".join(x for x in [TYPE_NAME.get(et, et), p.get("country", ""), sev] if x)[:120],
             "tone": "critical" if lvl == "red" else "elevated",
             "ts": (p.get("fromdate") + "Z") if p.get("fromdate") and not p.get("fromdate").endswith("Z") else p.get("fromdate"),
-            "meta": {"type": et, "alert": p.get("alertlevel"), "country": p.get("country"), "url": p.get("url", {}).get("report") if isinstance(p.get("url"), dict) else p.get("url")},
+            "meta": {"type": et, "alert": p.get("alertlevel"), "country": p.get("country"),
+                     "lat": lat, "lng": lng,
+                     "url": p.get("url", {}).get("report") if isinstance(p.get("url"), dict) else p.get("url")},
         })
     # Red first, then by alert score.
     items.sort(key=lambda x: (x["tone"] == "critical"), reverse=True)
